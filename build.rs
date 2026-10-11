@@ -1,7 +1,7 @@
 use std::process::Command;
 use std::path::PathBuf;
 
-const CPPFLAGS: &'static str = "-std=c++14 -flto -O3 -DNDEBUG -ffast-math -fno-builtin-malloc -Wall -Wextra -Wshadow -Wconversion -Wuninitialized -Dalways_inline=";
+const CPPFLAGS: &'static str = "-std=c++20 -flto -O3 -DNDEBUG -ffast-math -fno-builtin-malloc -Wall -Wextra -Wshadow -Wconversion -Wuninitialized -Dalways_inline=";
 
 fn main() {
     // target/{build}/hoard-sys-{hash}/out
