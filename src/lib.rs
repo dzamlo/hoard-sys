@@ -7,6 +7,7 @@ use std::{mem, ptr};
 #[link(name = "hoard", kind = "static")]
 extern "C" {
     fn xxmemalign(alignment: size_t, size: size_t) -> *mut c_void;
+    fn xxrealloc(ptr: *mut c_void, size: size_t) -> *mut c_void;
     fn xxfree(ptr: *mut c_void);
     fn xxmalloc_usable_size(ptr: *mut c_void) -> size_t;
 }
@@ -92,14 +93,17 @@ pub unsafe extern "C" fn realloc(allocation: *mut c_void, size: size_t) -> *mut 
         free(allocation);
         return ptr::null_mut();
     }
-    let old_size = xxmalloc_usable_size(allocation);
-    if size <= old_size {
-        return allocation;
+    let alignment = mem::align_of::<libc::max_align_t>();
+    if size > isize::MAX as usize - alignment {
+        *libc::__errno_location() = libc::ENOMEM;
+        return ptr::null_mut();
     }
-    let replacement = malloc(size);
-    if !replacement.is_null() {
-        ptr::copy_nonoverlapping(allocation.cast::<u8>(), replacement.cast::<u8>(), old_size);
-        free(allocation);
+    // Like xxmemalign's fundamental-alignment path, round the request so
+    // xxrealloc's raw xxmalloc allocation uses an aligned size class.
+    let rounded_size = (size + alignment - 1) & !(alignment - 1);
+    let replacement = xxrealloc(allocation, rounded_size);
+    if replacement.is_null() {
+        *libc::__errno_location() = libc::ENOMEM;
     }
     replacement
 }

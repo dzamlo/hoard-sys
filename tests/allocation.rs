@@ -66,6 +66,43 @@ fn aligned_allocations() {
 }
 
 #[test]
+fn reallocation_preserves_alignment_and_contents() {
+    unsafe {
+        // Keep allocations live to exercise consecutive objects in size classes
+        // whose unrounded sizes would only guarantee eight-byte alignment.
+        let mut allocations = Vec::new();
+        for _ in 0..32 {
+            let ptr = realloc(std::ptr::null_mut(), 1).cast::<u8>();
+            assert!(!ptr.is_null());
+            ptr.write(0x5a);
+            let grown = realloc(ptr.cast(), 40).cast::<u8>();
+            assert!(!grown.is_null());
+            assert_eq!(
+                grown as usize % std::mem::align_of::<libc::max_align_t>(),
+                0
+            );
+            assert_eq!(grown.read(), 0x5a);
+            grown.write_bytes(0xa5, 40);
+            let shrunk = realloc(grown.cast(), 24).cast::<u8>();
+            assert!(!shrunk.is_null());
+            assert!(std::slice::from_raw_parts(shrunk, 24)
+                .iter()
+                .all(|&b| b == 0xa5));
+            *libc::__errno_location() = 0;
+            assert!(realloc(shrunk.cast(), usize::MAX).is_null());
+            assert_eq!(*libc::__errno_location(), libc::ENOMEM);
+            assert!(std::slice::from_raw_parts(shrunk, 24)
+                .iter()
+                .all(|&b| b == 0xa5));
+            allocations.push(shrunk);
+        }
+        for ptr in allocations {
+            free(ptr.cast());
+        }
+    }
+}
+
+#[test]
 fn allocations_survive_the_allocating_thread() {
     let threads: Vec<_> = (0..8)
         .map(|_| {
